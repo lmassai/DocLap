@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Overlap annotator</title>
+        <link rel='stylesheet' href='styles.css'>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.6.347/pdf.min.js"></script>
+
+        <style>
+            #tag-container .tag {
+              background-color: #a8d0ef !important;
+            }
+
+            #tag-container .tag {
+                background-color: #a8d0ef;
+                color: white;
+                padding: 5px 10px;
+                border-radius: 15px;
+                display: flex;
+                align-items: center;
+            }
+
+            #tag-container .remove-tag {
+                margin-left: 8px;
+                cursor: default;
+                pointer-events: none;
+            }
+        </style>
+
+    </head>
+    <body>
+        <input type="hidden" id="logData" name="logData">
+        <div class="nav-links">
+            <a href="index.html">Upload page</a>
+            <a href="latex_processor.html">LaTeX processor</a>
+            <a href="pdf_processor.html">PDF processor</a>
+            <a href="constraints_violations.html" class="active">Overlap annotator</a>
+            <a href="file_preview.html">File preview</a>
+        </div>
+        <div class="container">
+            <div class="loader" id="loader"></div>
+            <div class="pdf-viewer" id="pdf-viewer"></div>
+            <div class="chat-container">
+                <div class="context-section">
+                    <label for="context-select" style="padding: 10px;">Question context:</label>
+                    <select id="context-select" onchange="handleSelectChange()" disabled>
+                        <option value="General info">General info</option>
+                        <option value="Header data">Header data</option>
+                        <option value="Abstract">Abstract</option>
+                        <option value="Figures">Figures</option>
+                        <option value="Tables">Tables</option>
+                        <option value="Formulas">Formulas</option>
+                        <option value="Sections">Sections</option>
+                        <option value="Links">Links</option>
+                        <option value="Notes">Notes</option>
+                        <option value="Acknowledgements">Acknowledgements</option>
+                        <option value="References">References</option>
+                        <option value="Phrase">Phrase</option>
+                        <option value="Select all">Select all</option>
+                    </select>
+
+                    <label>
+                      <input type="checkbox" id="autoContextCheckbox" onclick="toggleContextSelect()" checked disabled>
+                      Automatic context classification
+                    </label>
+
+                    <div class="tag-container" id="tag-container">
+                        <div class="tag">General info<span class="remove-tag" onclick="removeTag(this)"><b>x</b></span></div>
+                        <div class="tag">Header data<span class="remove-tag" onclick="removeTag(this)"><b>x</b></span></div>
+                        <div class="tag">Abstract<span class="remove-tag" onclick="removeTag(this)"><b>x</b></span></div>
+                    </div>
+                </div>
+
+                <div id="messages" class="messages"></div>
+                <div class="input-container">
+                    <textarea id="question" rows="3" onkeydown="checkEnter(event)"></textarea>
+                    <button id="send-button" onclick="askQuestion()">Send</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="save-coords">Coordinates saved!</div>
+
+        <script>
+            window.onload = function () {
+                const questionInput = document.getElementById('question');
+                const sendButton = document.getElementById('send-button');
+                questionInput.disabled = true;
+                sendButton.disabled = true;
+                sendButton.style.backgroundColor = '#A5D6A7';
+                sendButton.style.cursor = 'default';
+            };
+
+            function handleSelectChange() {
+                var select = document.getElementById('context-select');
+                var selectedOption = select.options[select.selectedIndex].text;
+
+                if (selectedOption === 'Select all') {
+                    var allOptions = [
+                        'General info', 'Header data', 'Abstract', 'Figures', 'Tables',
+                        'Formulas', 'Sections', 'Links', 'Notes', 'Acknowledgements', 'References', 'Phrase'
+                    ];
+
+                    allOptions.forEach(option => {
+                        addTag(option);
+                    });
+
+                    select.selectedIndex = 0;
+                } else {
+                    addTag();
+                }
+            }
+
+            async function loadPDF(url) {
+                var pdfjsLib = window['pdfjs-dist/build/pdf'];
+                pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.6.347/pdf.worker.min.js';
+                var pdfViewer = document.getElementById('pdf-viewer');
+                var loader = document.getElementById('loader');
+                pdfViewer.innerHTML = '';
+
+                try {
+                    const pdf = await pdfjsLib.getDocument(url).promise;
+                    const numPages = pdf.numPages;
+                    const pagePromises = [];
+
+                    for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+                        pagePromises.push(pdf.getPage(pageNum));
+                    }
+
+                    const pages = await Promise.all(pagePromises);
+                    const canvases = Array(numPages);
+
+                    await Promise.all(pages.map((page, index) => {
+                        const viewport = page.getViewport({ scale: 1.8 });
+                        const canvas = document.createElement('canvas');
+                        const context = canvas.getContext('2d');
+                        canvas.height = viewport.height;
+                        canvas.width = viewport.width;
+
+                        const renderContext = {
+                            canvasContext: context,
+                            viewport: viewport
+                        };
+
+                        const pageContainer = document.createElement('div');
+                        pageContainer.className = 'pdf-page-container';
+                        pageContainer.style.width = canvas.width + 'px';
+                        pageContainer.style.height = canvas.height + 'px';
+                        pageContainer.style.position = 'relative';
+                        pageContainer.appendChild(canvas);
+                        pdfViewer.appendChild(pageContainer);
+
+                        return page.render(renderContext).promise.then(function () {
+                            canvases[index] = canvas;
+                            fetchAndAddBoundingBoxes(index + 1, pageContainer, viewport);
+                        });
+                    }));
+
+                    loader.style.display = 'none';
+                    localStorage.removeItem('loaderActive');
+                } catch (error) {
+                    console.error(error);
+                    loader.style.display = 'none';
+                }
+            }
+
+            function showCoordsSaved(message) {
+                const popup = document.getElementById('save-coords');
+                popup.textContent = message;
+                popup.classList.add('show');
+                setTimeout(() => {
+                    popup.classList.remove('show');
+                }, 2000);
+            }
+
+            function coherent_overlaps(data) {
+                const allowedClasses = [
+                    "title", "list of authors", "abstract", "label", "figure label", "table label",
+                    "figure", "table", "formula", "section title", "Link", "footnote",
+                    "Acknowledgements", "Reference", "sentence"
+                ];
+
+                const lines = data.split('\n');
+                const results = [];
+
+                for (const line of lines) {
+                    const match = line.match(/^([\w ]+)\s+coordinates:\s+\(page: (\d+), x: ([\d.]+), y: ([\d.]+), w: ([\d.]+), h: ([\d.]+)\)/);
+                    if (match) {
+                        const [_, cls, page, x, y, w, h] = match;
+                        if (allowedClasses.includes(cls.trim())) {
+                            results.push(`${cls.trim()},${page},${x},${y},${w},${h}`);
+                        }
+                    }
+                }
+
+                return results;
+            }
+
+            function fetchAndAddBoundingBoxes(pageNumber, pageContainer, viewport) {
+                let lastClickedLine = null;
+                var xhr = new XMLHttpRequest();
+                xhr.open('GET', 'http://localhost:5000/uploads/to_process/overlap_errors.txt', true);
+                xhr.onload = function () {
+                    if (xhr.status === 200) {
+                        const boundingBoxes = parseBoundingBoxes(xhr.responseText, pageNumber, viewport);
+                        const params = new URLSearchParams(window.location.search);
+                        const pdfUrl = params.get('pdfUrl');
+                        const pdfName = pdfUrl ? decodeURIComponent(pdfUrl).split('/').pop() : null;
+
+                        boundingBoxes.forEach(box => {
+                            if (box.page === pageNumber) {
+                                const y = viewport.height - (box.y + box.height);
+                                const div = document.createElement('div');
+                                div.className = 'bounding-box';
+                                div.style.left = box.x + 'px';
+                                div.style.top = y + 'px';
+                                div.style.width = box.width + 'px';
+                                div.style.height = box.height + 'px';
+
+                                div.onclick = function () {
+                                const line = box.data
+                                    .split('\n')
+                                    .map(s => s.trim())
+                                    .filter(s => s.length > 0)
+                                    .map(s => {
+                                        const match = s.match(/^(.+?):\s*\(page:\s*(\d+),\s*x:\s*([\d.]+),\s*y:\s*([\d.]+),\s*w:\s*([\d.]+),\s*h:\s*([\d.]+)\)$/);
+                                        if (match) {
+                                            let [ , label, page, x, y, w, h ] = match;
+                                            label = label.replace(/ coordinates$/, '');
+                                            return `${pdfName},${label},${page},${x},${y},${w},${h}`;
+                                        }
+                                        return null;
+                                    })
+                                    .filter(s => s !== null)
+                                    .join('\n');
+
+                                if (line === lastClickedLine) {
+                                    fetch('http://localhost:5000/delete_groundtruth_errors_bb', {
+                                        method: 'POST',
+                                        headers: {
+                                            'Content-Type': 'application/json'
+                                        },
+                                        body: JSON.stringify({ line })
+                                    })
+                                    .then(response => response.json())
+                                    .then(data => {
+                                        showCoordsSaved('DELETED ROW:\n' + line);
+                                        console.log('Row deleted:', data.message);
+                                        lastClickedLine = null;
+                                    })
+                                    .catch(error => {
+                                        console.error('Errore nella cancellazione:', error);
+                                    });
+                                } else {
+                                    fetch('http://localhost:5000/save_groundtruth_errors_bb', {
+                                        method: 'POST',
+                                        headers: {
+                                            'Content-Type': 'application/json'
+                                        },
+                                        body: JSON.stringify({ line })
+                                    })
+                                    .then(response => response.json())
+                                    .then(data => {
+                                        showCoordsSaved('SAVED ROW:\n' + line);
+                                        console.log('Row saved:', data.message);
+                                        lastClickedLine = line;
+                                    })
+                                    .catch(error => {
+                                        console.error('Errore nel salvataggio:', error);
+                                    });
+                                }
+                            };
+
+                                div.onmouseenter = function() {
+                                    showPopup(div, box.data);
+                                };
+
+                                div.onmouseleave = function() {
+                                    hidePopup();
+                                };
+
+                                pageContainer.appendChild(div);
+                            }
+                        });
+                    } else {
+                        addMessage('Errore nel caricamento delle bounding boxes.', 'bot');
+                    }
+                };
+                xhr.onerror = function () {
+                    addMessage('Errore di connessione al server per le bounding boxes.', 'bot');
+                };
+                xhr.send();
+            }
+
+            function parseBoundingBoxes(text, pageNumber, viewport) {
+                const lines = text.split('\n');
+                const boundingBoxes = [];
+                let accumulatedText = '';
+                let currentData = '';
+                let currentPage = null;
+
+                lines.forEach((line) => {
+                    if (line.includes('end_section') || line.trim() === '') {
+                        accumulatedText = '';
+                        return;
+                    }
+
+                    const pageMatch = line.match(/(Article_title|Author|Abstract|Caption|Caption_Figure|Caption_Table|Figure|Table|Formula|Section|Link|Note|Acknowledgements|Reference|Phrase) page: (\d+)/);
+                    const coordinatesMatch = line.match(/coordinates: \(page: (\d+), x: ([\d.]+), y: ([\d.]+), w: ([\d.]+), h: ([\d.]+)\)/);
+
+                    if (pageMatch) {
+                        const page = parseInt(pageMatch[2]);
+                        if (currentPage !== null && currentPage !== page) {
+                            accumulatedText = '';
+                        }
+                        currentPage = page;
+                    }
+
+                    if (coordinatesMatch) {
+                        const page = parseInt(coordinatesMatch[1]);
+                        if (page === pageNumber) {
+                            const x = parseFloat(coordinatesMatch[2]) * viewport.scale;
+                            const y = (viewport.height - (parseFloat(coordinatesMatch[3]) + parseFloat(coordinatesMatch[5])) * viewport.scale);
+                            const width = parseFloat(coordinatesMatch[4]) * viewport.scale;
+                            const height = parseFloat(coordinatesMatch[5]) * viewport.scale;
+
+                            const fullData = currentData + '\n' + line;
+                            boundingBoxes.push({
+                                page: page,
+                                x: x - 1,
+                                y: y + 2,
+                                width: width - 1,
+                                height: height,
+                                data: fullData.trim()
+                            });
+                            accumulatedText = '';
+                        }
+                    } else {
+                        accumulatedText += line + '\n';
+                        currentData = accumulatedText;
+                    }
+                });
+
+                return boundingBoxes;
+            }
+
+            function showPopup(element, content) {
+                let popup = document.getElementById('popup');
+                if (!popup) {
+                    popup = document.createElement('div');
+                    popup.id = 'popup';
+                    popup.className = 'popup';
+                    document.body.appendChild(popup);
+                }
+
+                popup.innerText = content;
+                popup.style.display = 'block';
+
+                const rect = element.getBoundingClientRect();
+                popup.style.left = (rect.right + window.scrollX) + 'px';
+                popup.style.top = (rect.top + window.scrollY) + 'px';
+            }
+
+            function hidePopup() {
+                let popup = document.getElementById('popup');
+                if (popup) {
+                    popup.style.display = 'none';
+                }
+            }
+
+            document.addEventListener('DOMContentLoaded', function () {
+                if (localStorage.getItem('loaderActive') === 'true') {
+                    document.getElementById('loader').style.display = 'block';
+                }
+                var pdfUrl = 'http://localhost:5000/uploads/to_process/output_overlaps_with_bboxes.pdf';
+
+                if (pdfUrl) {
+                    loadPDF(pdfUrl);
+                }
+                addMessage('Detect overlap violations mode', 'bot');
+                addMessage('The bounding boxes shown on the left correspond to semantic overlaps. The boxes can be clicked to save coordinates. Double-click to delete the last annotation.', 'bot');
+                fetchLogContent();
+            });
+
+            function fetchLogContent() {
+                var xhr = new XMLHttpRequest();
+                xhr.open('GET', 'http://localhost:5000/uploads/to_process/overlap_errors.txt', true);
+                xhr.onload = function () {
+                    if (xhr.status === 200) {
+                        var responseText = xhr.responseText;
+                        var lines = responseText.split('\n');
+                        var logData = '';
+                        var coordRegex = /^(Article_title|Author|Abstract|Caption|Caption_Figure|Caption_Table|Figure|Table|Formula|Section|Link|Note|Acknowledgements|Reference) coordinates: \(page: \d+, x: [-+]?[0-9]*\.?[0-9]+, y: [-+]?[0-9]*\.?[0-9]+, w: [-+]?[0-9]*\.?[0-9]+, h: [-+]?[0-9]*\.?[0-9]+\)$/;
+
+                        lines.forEach(function(line) {
+                            if (line.trim() !== '') {
+                                logData += line + '\n';
+                            }
+                        });
+
+                        document.getElementById('logData').value = logData;
+                        var sections = logData.split('end_section');
+
+                        sections.forEach(function(section) {
+                            section = section.trim();
+
+                            if (section !== '') {
+                                var filteredSection = section.split('\n').filter(function(line) {
+                                    return !coordRegex.test(line.trim());
+                                }).join('\n');
+
+                                if (filteredSection.trim() !== '') {
+                                    filteredSection = filteredSection
+                                        .replace(/Number of overlap violations/g, '<b>Number of overlap violations</b>')
+                                        .replace(/Class overlaps which are not allowed by ontology constraints:/g, '<br><br>Class overlaps which are not allowed by ontology constraints:');
+
+                                    addMessage(filteredSection, 'bot');
+                                }
+                            }
+                        });
+                    } else {
+                        addMessage('Errore nel caricamento del file di log.', 'bot');
+                    }
+                };
+                xhr.onerror = function () {
+                    addMessage('Errore di connessione al server.', 'bot');
+                };
+                xhr.send();
+
+                var pdfProcessorXhr = new XMLHttpRequest();
+                pdfProcessorXhr.open('GET', 'http://localhost:5000/uploads/to_process/pdf_processor_log.txt', true);
+                pdfProcessorXhr.onload = function () {
+                    if (pdfProcessorXhr.status === 200) {
+                        var pdfLogContent = pdfProcessorXhr.responseText;
+                        if (pdfLogContent.includes('Cannot process pdf')) {
+                            addMessage('This PDF cannot be processed', 'bot');
+                        }
+                    } else {
+                        addMessage('Errore nel caricamento del file pdf_processor_log.txt.', 'bot');
+                    }
+                };
+                pdfProcessorXhr.onerror = function () {
+                    addMessage('Errore di connessione al server per pdf_processor_log.txt.', 'bot');
+                };
+                pdfProcessorXhr.send();
+            }
+
+            function checkEnter(event) {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    askQuestion();
+                }
+            }
+
+            function askQuestion() {
+                var question = document.getElementById('question').value;
+                if (question.trim() === '') return;
+                addMessage(question, 'user');
+                document.getElementById('question').value = '';
+
+                var logData = document.getElementById('logData').value;
+
+                var context = Array.from(document.querySelectorAll('.tag'))
+                    .map(tag => {
+                        let text = tag.textContent.trim();
+                        if (text.endsWith('x')) {
+                            text = text.slice(0, -1).trim();
+                        }
+                        return text;
+                    });
+
+                var xhr = new XMLHttpRequest();
+                xhr.open('POST', 'http://localhost:5000/answer_question', true);
+                xhr.setRequestHeader('Content-Type', 'application/json');
+                xhr.onload = function () {
+                    if (xhr.status === 200) {
+                        var response = JSON.parse(xhr.responseText);
+                        addMessage(response.risposta, 'bot');
+                    } else {
+                        addMessage('Errore nella richiesta.', 'bot');
+                    }
+                };
+                xhr.onerror = function () {
+                    addMessage('Errore di connessione al server.', 'bot');
+                };
+
+                var payload = JSON.stringify({
+                    question: question,
+                    logData: logData,
+                    contexts: context
+                });
+
+                xhr.send(payload);
+            }
+
+            function addTag(option) {
+                var tagContainer = document.getElementById('tag-container');
+
+                if (!option) {
+                    var select = document.getElementById('context-select');
+                    option = select.options[select.selectedIndex].text;
+                }
+
+                var existingTags = Array.from(tagContainer.children).map(tag => tag.textContent.trim().replace('x', ''));
+                if (!existingTags.includes(option)) {
+                    var tag = document.createElement('div');
+                    tag.className = 'tag';
+                    tag.innerHTML = option + '<span class="remove-tag" onclick="removeTag(this)"><b>x</b></span>';
+                    tagContainer.appendChild(tag);
+                }
+            }
+
+            function removeTag(element) {
+                var tagContainer = document.getElementById('tag-container');
+                tagContainer.removeChild(element.parentNode);
+            }
+
+            function addMessage(message, sender) {
+                var messagesContainer = document.getElementById('messages');
+                var messageElement = document.createElement('div');
+                messageElement.className = sender === 'user' ? 'message user' : 'message bot';
+                var bubbleElement = document.createElement('div');
+                bubbleElement.className = 'message-bubble';
+                bubbleElement.innerHTML = message;
+                messageElement.appendChild(bubbleElement);
+                messagesContainer.appendChild(messageElement);
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            }
+        </script>
+
+        <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            var navLinks = document.querySelectorAll('.nav-links a');
+
+            navLinks.forEach(function(link) {
+                if (link.textContent !== 'Upload page') {
+                    link.style.pointerEvents = 'none';
+                    link.style.opacity = '0.5';
+                }
+            });
+        });
+        </script>
+    </body>
+</html>

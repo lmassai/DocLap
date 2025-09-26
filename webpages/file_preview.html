@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>File preview</title>
+        <link rel='stylesheet' href='styles.css'>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.6.347/pdf.min.js"></script>
+        <link href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/themes/prism.css" rel="stylesheet" />
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/prism.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.24.1/components/prism-latex.min.js"></script>
+        <style>
+            #tag-container .tag {
+              background-color: #a8d0ef !important;
+            }
+            .tex-viewer pre,
+            .tex-viewer code {
+                background-color: #ffffff;
+            }
+
+            #tag-container .tag {
+                background-color: #a8d0ef;
+                color: white;
+                padding: 5px 10px;
+                border-radius: 15px;
+                display: flex;
+                align-items: center;
+            }
+
+            #tag-container .remove-tag {
+                margin-left: 8px;
+                cursor: default;
+                pointer-events: none;
+            }
+        </style>
+
+    </head>
+    <body>
+        <div class="nav-links">
+            <a href="index.html">Upload page</a>
+            <a href="latex_processor.html">LaTeX processor</a>
+            <a href="pdf_processor.html">PDF processor</a>
+            <a href="constraints_violations.html">Overlap annotator</a>
+            <a class="active">File preview</a>
+        </div>
+        <div class="container">
+            <div class="loader" id="loader"></div>
+            <div class="pdf-viewer" id="pdf-viewer"></div>
+            <div class="tex-viewer" id="tex-viewer"></div>
+            <div class="chat-container">
+                <div class="context-section">
+                    <label for="context-select" style="padding: 10px;">Question context:</label>
+                    <select id="context-select" onchange="handleSelectChange()" disabled>
+                        <option value="General info">General info</option>
+                        <option value="Header data">Header data</option>
+                        <option value="Abstract">Abstract</option>
+                        <option value="Figures">Figures</option>
+                        <option value="Tables">Tables</option>
+                        <option value="Formulas">Formulas</option>
+                        <option value="Sections">Sections</option>
+                        <option value="Links">Links</option>
+                        <option value="Notes">Notes</option>
+                        <option value="Acknowledgements">Acknowledgements</option>
+                        <option value="References">References</option>
+                        <option value="Phrase">Phrase</option>
+                        <option value="Select all">Select all</option>
+                    </select>
+
+                    <label>
+                      <input type="checkbox" id="autoContextCheckbox" onclick="toggleContextSelect()" checked disabled>
+                      Automatic context classification
+                    </label>
+
+                    <div class="tag-container" id="tag-container">
+                        <div class="tag">General info<span class="remove-tag" onclick="removeTag(this)"><b>x</b></span></div>
+                        <div class="tag">Header data<span class="remove-tag" onclick="removeTag(this)"><b>x</b></span></div>
+                        <div class="tag">Abstract<span class="remove-tag" onclick="removeTag(this)"><b>x</b></span></div>
+                    </div>
+                </div>
+
+                <div id="messages" class="messages"></div>
+                <div class="input-container">
+                    <textarea id="question" rows="3" onkeydown="checkEnter(event)"></textarea>
+                    <button id="send-button" onclick="askQuestion()">Send</button>
+                </div>
+            </div>
+        </div>
+
+        <script>
+
+            function generateBoundingBoxes() {
+                var params = new URLSearchParams(window.location.search);
+                var pdfUrl = params.get('pdfUrl');
+                var pdfFilename = pdfUrl.split('/').pop();
+
+                var xhr = new XMLHttpRequest();
+                xhr.open('POST', 'http://localhost:5000/generate_bounding_boxes', true);
+                xhr.setRequestHeader('Content-Type', 'application/json');
+
+                xhr.onload = function () {
+                    if (xhr.status === 200) {
+                        localStorage.setItem('loaderActive', 'true');
+                        window.location.href = 'pdf_processor.html?pdfUrl=' + encodeURIComponent(pdfUrl);
+                    } else {
+                        alert('Error generating bounding boxes.');
+                    }
+                };
+                xhr.onerror = function () {
+                    alert('Error connecting to server.');
+                };
+                xhr.send(JSON.stringify({ filename: pdfFilename }));
+            }
+
+            document.addEventListener('DOMContentLoaded', function () {
+                var boundingBoxesLink = document.querySelector('a[href="pdf_processor.html"]');
+                boundingBoxesLink.addEventListener('click', function (event) {
+                    event.preventDefault();
+                    document.getElementById('loader').style.display = 'block';
+                    generateBoundingBoxes();
+                });
+            });
+        </script>
+
+        <script>
+            function generateOntology() {
+                var params = new URLSearchParams(window.location.search);
+                var pdfUrl = params.get('pdfUrl');
+                var pdfFilename = pdfUrl.split('/').pop();
+
+                var xhr = new XMLHttpRequest();
+                xhr.open('POST', 'http://localhost:5000/find_violations', true);
+                xhr.setRequestHeader('Content-Type', 'application/json');
+
+                xhr.onload = function () {
+                    if (xhr.status === 200) {
+                        localStorage.setItem('loaderActive', 'true');
+                        window.location.href = 'constraints_violations.html?pdfUrl=' + encodeURIComponent(pdfUrl);
+                    } else {
+                        alert('Error generating ontology.');
+                    }
+                };
+                xhr.onerror = function () {
+                    alert('Error connecting to server.');
+                };
+                xhr.send(JSON.stringify({ filename: pdfFilename }));
+            }
+
+            document.addEventListener('DOMContentLoaded', function () {
+                var ontologyLink = document.querySelector('a[href="constraints_violations.html"]');
+                ontologyLink.addEventListener('click', function (event) {
+                    event.preventDefault();
+                    document.getElementById('loader').style.display = 'block';
+                    generateOntology();
+                });
+            });
+        </script>
+
+        <script>
+            function generateKeyValuePairsFromTex() {
+                var params = new URLSearchParams(window.location.search);
+                var texUrl = params.get('texUrl');
+                var texFilename = texUrl.split('/').pop();
+
+                var xhr = new XMLHttpRequest();
+                xhr.open('POST', 'http://localhost:5000/generate_key-value_pairs_from_tex', true);
+                xhr.setRequestHeader('Content-Type', 'application/json');
+
+                xhr.onload = function () {
+                    if (xhr.status === 200) {
+                        localStorage.setItem('loaderActive', 'true');
+                        window.location.href = 'latex_processor.html?texUrl=' + encodeURIComponent(texUrl);
+                    } else {
+                        alert('Error extracting key-value pairs from LaTeX.');
+                    }
+                };
+                xhr.onerror = function () {
+                    alert('Error connecting to server.');
+                };
+                xhr.send(JSON.stringify({ filename: texFilename }));
+            }
+
+            document.addEventListener('DOMContentLoaded', function () {
+                var latexProcessorLink = document.querySelector('a[href="latex_processor.html"]');
+                latexProcessorLink.addEventListener('click', function (event) {
+                    event.preventDefault();
+                    document.getElementById('loader').style.display = 'block';
+                    generateKeyValuePairsFromTex();
+                });
+            });
+        </script>
+
+        <script>
+            async function loadPDF(url) {
+                var pdfjsLib = window['pdfjs-dist/build/pdf'];
+                pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.6.347/pdf.worker.min.js';
+                var pdfViewer = document.getElementById('pdf-viewer');
+                var texViewer = document.getElementById('tex-viewer');
+                var loader = document.getElementById('loader');
+                pdfViewer.innerHTML = '';
+                texViewer.style.display = 'none';
+                pdfViewer.style.display = 'grid';
+                loader.style.display = 'block';
+
+                try {
+                    const pdf = await pdfjsLib.getDocument(url).promise;
+                    const numPages = pdf.numPages;
+                    const pagePromises = [];
+
+                    for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+                        pagePromises.push(pdf.getPage(pageNum));
+                    }
+
+                    const pages = await Promise.all(pagePromises);
+                    const canvases = Array(numPages);
+
+                    await Promise.all(pages.map((page, index) => {
+                        const viewport = page.getViewport({ scale: 1.8 });
+                        const canvas = document.createElement('canvas');
+                        const context = canvas.getContext('2d');
+                        canvas.height = viewport.height;
+                        canvas.width = viewport.width;
+
+                        const renderContext = {
+                            canvasContext: context,
+                            viewport: viewport
+                        };
+
+                        return page.render(renderContext).promise.then(function () {
+                            canvases[index] = canvas;
+                        });
+                    }));
+
+                    canvases.forEach(canvas => {
+                        pdfViewer.appendChild(canvas);
+                    });
+
+                    loader.style.display = 'none';
+                    localStorage.removeItem('loaderActive');
+                } catch (error) {
+                    console.error(error);
+                    loader.style.display = 'none';
+                }
+            }
+
+            async function loadTEX(url) {
+                var texViewer = document.getElementById('tex-viewer');
+                var pdfViewer = document.getElementById('pdf-viewer');
+                var loader = document.getElementById('loader');
+
+                texViewer.innerHTML = '';
+                pdfViewer.style.display = 'none';
+                texViewer.style.display = 'grid';
+                loader.style.display = 'block';
+
+
+                try {
+                    const response = await fetch(url);
+                    const texContent = await response.text();
+
+                    const codeElement = document.createElement('code');
+                    codeElement.className = 'language-latex';
+                    codeElement.textContent = texContent;
+
+                    const preElement = document.createElement('pre');
+                    preElement.appendChild(codeElement);
+                    texViewer.appendChild(preElement);
+
+                    Prism.highlightElement(codeElement);
+
+                    loader.style.display = 'none';
+                    localStorage.removeItem('loaderActive');
+                } catch (error) {
+                    console.error(error);
+                    loader.style.display = 'none';
+                }
+            }
+
+            document.addEventListener('DOMContentLoaded', function () {
+                if (localStorage.getItem('loaderActive') === 'true') {
+                    document.getElementById('loader').style.display = 'block';
+                }
+                var params = new URLSearchParams(window.location.search);
+                var pdfUrl = params.get('pdfUrl');
+                var texUrl = params.get('texUrl');
+                if (pdfUrl) {
+                    loadPDF(pdfUrl);
+                }
+                else{
+                    loadTEX(texUrl);
+                }
+            });
+
+            function checkEnter(event) {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    askQuestion();
+                }
+            }
+
+            function askQuestion() {
+                var question = document.getElementById('question').value;
+                if (question.trim() === '') return;
+                addMessage(question, 'user');
+                document.getElementById('question').value = '';
+
+                var logData = document.getElementById('logData').value;
+
+                var context = Array.from(document.querySelectorAll('.tag'))
+                    .map(tag => {
+                        let text = tag.textContent.trim();
+                        if (text.endsWith('x')) {
+                            text = text.slice(0, -1).trim();
+                        }
+                        return text;
+                    });
+
+                var xhr = new XMLHttpRequest();
+                xhr.open('POST', 'http://localhost:5000/answer_question', true);
+                xhr.setRequestHeader('Content-Type', 'application/json');
+                xhr.onload = function () {
+                    if (xhr.status === 200) {
+                        var response = JSON.parse(xhr.responseText);
+                        addMessage(response.risposta, 'bot');
+                    } else {
+                        addMessage('Errore nella richiesta.', 'bot');
+                    }
+                };
+                xhr.onerror = function () {
+                    addMessage('Errore di connessione al server.', 'bot');
+                };
+
+                var payload = JSON.stringify({
+                    question: question,
+                    logData: logData,
+                    contexts: context
+                });
+
+                xhr.send(payload);
+            }
+
+            function addTag(option) {
+                var tagContainer = document.getElementById('tag-container');
+
+                if (!option) {
+                    var select = document.getElementById('context-select');
+                    option = select.options[select.selectedIndex].text;
+                }
+
+                var existingTags = Array.from(tagContainer.children).map(tag => tag.textContent.trim().replace('x', ''));
+                if (!existingTags.includes(option)) {
+                    var tag = document.createElement('div');
+                    tag.className = 'tag';
+                    tag.innerHTML = option + '<span class="remove-tag" onclick="removeTag(this)"><b>x</b></span>';
+                    tagContainer.appendChild(tag);
+                }
+            }
+
+            function removeTag(element) {
+                var tagContainer = document.getElementById('tag-container');
+                tagContainer.removeChild(element.parentNode);
+            }
+
+            function addMessage(message, sender) {
+                var messagesContainer = document.getElementById('messages');
+                var messageElement = document.createElement('div');
+                messageElement.className = sender === 'user' ? 'message user' : 'message bot';
+                var bubbleElement = document.createElement('div');
+                bubbleElement.className = 'message-bubble';
+                bubbleElement.innerHTML = message;
+                messageElement.appendChild(bubbleElement);
+                messagesContainer.appendChild(messageElement);
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            }
+        </script>
+
+        <script>
+            document.addEventListener('DOMContentLoaded', function() {
+            document.querySelector('.input-container').classList.add('disabled');
+            document.getElementById('question').disabled = true;
+            document.getElementById('send-button').disabled = true;
+            addMessage('This is a preview page, chat functionalities are disabled. To make questions about the provided input, select processing type using the top menu items.', 'bot');
+                var fileType = localStorage.getItem('fileType');
+                var navLinks = document.querySelectorAll('.nav-links a');
+
+                if (fileType === 'pdf') {
+                    navLinks.forEach(function(link) {
+                        if (link.textContent !== 'Overlap annotator' && link.textContent !== 'PDF processor' && link.textContent !== 'Upload page') {
+                            link.style.pointerEvents = 'none';
+                            link.style.opacity = '0.5';
+                        }
+                    });
+                } else if (fileType === 'tex') {
+                    navLinks.forEach(function(link) {
+                        if (link.textContent !== 'LaTeX processor' && link.textContent !== 'Upload page') {
+                            link.style.pointerEvents = 'none';
+                            link.style.opacity = '0.5';
+                        }
+                    });
+                } else if (fileType === 'pair') {
+                    navLinks.forEach(function(link) {
+                        if (link.textContent !== 'Overlap annotator' && link.textContent !== 'Upload page') {
+                            link.style.pointerEvents = 'none';
+                            link.style.opacity = '0.5';
+                        }
+                    });
+                }
+            });
+        </script>
+    </body>
+</html>

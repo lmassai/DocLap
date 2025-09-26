@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>PDF processor</title>
+        <link rel='stylesheet' href='styles.css'>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.6.347/pdf.min.js"></script>
+    </head>
+    <body>
+        <input type="hidden" id="logData" name="logData">
+        <div class="nav-links">
+            <a href="index.html">Upload page</a>
+            <a href="latex_processor.html">LaTeX processor</a>
+            <a href="pdf_processor.html" class="active">PDF processor</a>
+            <a href="constraints_violations.html">Overlap annotator</a>
+            <a href="file_preview.html">File preview</a>
+        </div>
+        <div class="container">
+            <div class="loader" id="loader"></div>
+            <div class="pdf-viewer" id="pdf-viewer"></div>
+            <div class="chat-container">
+                <div class="context-section">
+                    <label for="context-select" style="padding: 10px;">Question context:</label>
+                    <select id="context-select" onchange="handleSelectChange()">
+                        <option value="General info">General info</option>
+                        <option value="Header data">Header data</option>
+                        <option value="Abstract">Abstract</option>
+                        <option value="Figures">Figures</option>
+                        <option value="Tables">Tables</option>
+                        <option value="Formulas">Formulas</option>
+                        <option value="Sections">Sections</option>
+                        <option value="Links">Links</option>
+                        <option value="Notes">Notes</option>
+                        <option value="Acknowledgements">Acknowledgements</option>
+                        <option value="References">References</option>
+                        <option value="Phrase">Phrase</option>
+                        <option value="Select all">Select all</option>
+                    </select>
+
+                    <label>
+                      <input type="checkbox" id="autoContextCheckbox" onclick="toggleContextSelect()" checked>
+                      Automatic context classification
+                    </label>
+
+                    <div class="tag-container" id="tag-container">
+                        <div class="tag">General info<span class="remove-tag" onclick="removeTag(this)"><b>x</b></span></div>
+                        <div class="tag">Header data<span class="remove-tag" onclick="removeTag(this)"><b>x</b></span></div>
+                        <div class="tag">Abstract<span class="remove-tag" onclick="removeTag(this)"><b>x</b></span></div>
+                    </div>
+                </div>
+
+                <div id="messages" class="messages"></div>
+                <div class="input-container">
+                    <textarea id="question" rows="3" onkeydown="checkEnter(event)"></textarea>
+                    <button id="send-button" onclick="askQuestion()">Send</button>
+                </div>
+            </div>
+        </div>
+
+        <script>
+             window.onload = function () {
+                toggleContextSelect();
+            };
+
+            function toggleContextSelect() {
+                const checkbox = document.getElementById('autoContextCheckbox');
+                const select = document.getElementById('context-select');
+                select.disabled = checkbox.checked;
+
+                if (checkbox.checked) {
+                    select.style.backgroundColor = '#e0e0e0';
+
+                    document.querySelectorAll('#tag-container .tag').forEach(tag => {
+                        tag.style.opacity = '0.5';
+                        tag.style.pointerEvents = 'none';
+                    });
+
+                } else {
+                    select.style.backgroundColor = '';
+
+                    document.querySelectorAll('#tag-container .tag').forEach(tag => {
+                        tag.style.opacity = '1';
+                        tag.style.pointerEvents = 'auto';
+                    });
+                }
+            }
+
+            function handleSelectChange() {
+                var select = document.getElementById('context-select');
+                var selectedOption = select.options[select.selectedIndex].text;
+
+                if (selectedOption === 'Select all') {
+                    var allOptions = [
+                        'General info', 'Header data', 'Abstract', 'Figures', 'Tables',
+                        'Formulas', 'Sections', 'Links', 'Notes', 'Acknowledgements', 'References', 'Phrase'
+                    ];
+
+                    allOptions.forEach(option => {
+                        addTag(option);
+                    });
+
+                    select.selectedIndex = 0;
+                } else {
+                    addTag();
+                }
+            }
+
+            async function loadPDF(url) {
+                var pdfjsLib = window['pdfjs-dist/build/pdf'];
+                pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.6.347/pdf.worker.min.js';
+                var pdfViewer = document.getElementById('pdf-viewer');
+                var loader = document.getElementById('loader');
+                pdfViewer.innerHTML = '';
+
+                try {
+                    const pdf = await pdfjsLib.getDocument(url).promise;
+                    const numPages = pdf.numPages;
+                    const pagePromises = [];
+
+                    for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+                        pagePromises.push(pdf.getPage(pageNum));
+                    }
+
+                    const pages = await Promise.all(pagePromises);
+                    const canvases = Array(numPages);
+
+                    await Promise.all(pages.map((page, index) => {
+                        const viewport = page.getViewport({ scale: 1.8 });
+                        const canvas = document.createElement('canvas');
+                        const context = canvas.getContext('2d');
+                        canvas.height = viewport.height;
+                        canvas.width = viewport.width;
+                        const renderContext = {
+                            canvasContext: context,
+                            viewport: viewport
+                        };
+                        const pageContainer = document.createElement('div');
+                        pageContainer.className = 'pdf-page-container';
+                        pageContainer.style.width = canvas.width + 'px';
+                        pageContainer.style.height = canvas.height + 'px';
+                        pageContainer.style.position = 'relative';
+                        pageContainer.appendChild(canvas);
+                        pdfViewer.appendChild(pageContainer);
+
+                        return page.render(renderContext).promise.then(function () {
+                            canvases[index] = canvas;
+                            fetchAndAddBoundingBoxes(index + 1, pageContainer, viewport);
+                        });
+                    }));
+
+                    loader.style.display = 'none';
+                    localStorage.removeItem('loaderActive');
+                } catch (error) {
+                    console.error(error);
+                    loader.style.display = 'none';
+                }
+            }
+
+            function fetchAndAddBoundingBoxes(pageNumber, pageContainer, viewport) {
+                var xhr = new XMLHttpRequest();
+                xhr.open('GET', 'http://localhost:5000/uploads/to_process/pdf_processor_log_cleaned.txt', true);
+                xhr.onload = function () {
+                    if (xhr.status === 200) {
+                        const boundingBoxes = parseBoundingBoxes(xhr.responseText, pageNumber, viewport);
+                        boundingBoxes.forEach(box => {
+                            if (box.page === pageNumber) {
+                                const y = viewport.height - (box.y + box.height);
+                                const div = document.createElement('div');
+                                div.className = 'bounding-box';
+                                div.style.left = box.x + 'px';
+                                div.style.top = y + 'px';
+                                div.style.width = box.width + 'px';
+                                div.style.height = box.height + 'px';
+                                div.onmouseenter = function() {
+                                    showPopup(div, box.data);
+                                };
+                                div.onmouseleave = function() {
+                                    hidePopup();
+                                };
+
+                                pageContainer.appendChild(div);
+                            }
+                        });
+                    } else {
+                        addMessage('Error loading bounding boxes.', 'bot');
+                    }
+                };
+                xhr.onerror = function () {
+                    addMessage('Server connection error when retrieving bounding boxes.', 'bot');
+                };
+                xhr.send();
+            }
+
+            function parseBoundingBoxes(text, pageNumber, viewport) {
+                const lines = text.split('\n');
+                const boundingBoxes = [];
+                let accumulatedText = '';
+                let currentData = '';
+                let currentPage = null;
+
+                lines.forEach((line) => {
+                    if (line.includes('end_section') || line.trim() === '') {
+                        accumulatedText = '';
+                        return;
+                    }
+                    const pageMatch = line.match(/(Article_title|Author|Abstract|Caption|Caption_Figure|Caption_Table|Figure|Table|Formula|Section|Link|Note|Acknowledgements|Reference) page: (\d+)/);
+                    const coordinatesMatch = line.match(/coordinates: \(page: (\d+), x: ([\d.]+), y: ([\d.]+), w: ([\d.]+), h: ([\d.]+)\)/);
+
+                    if (pageMatch) {
+                        const page = parseInt(pageMatch[2]);
+                        if (currentPage !== null && currentPage !== page) {
+                            accumulatedText = '';
+                        }
+                        currentPage = page;
+                    }
+
+                    if (coordinatesMatch) {
+                        const page = parseInt(coordinatesMatch[1]);
+                        if (page === pageNumber) {
+                            const x = parseFloat(coordinatesMatch[2]) * viewport.scale;
+                            const y = (viewport.height - (parseFloat(coordinatesMatch[3]) + parseFloat(coordinatesMatch[5])) * viewport.scale);
+                            const width = parseFloat(coordinatesMatch[4]) * viewport.scale;
+                            const height = parseFloat(coordinatesMatch[5]) * viewport.scale;
+                            const fullData = currentData + '\n' + line;
+
+                            boundingBoxes.push({
+                                page: page,
+                                x: x - 1,
+                                y: y + 2,
+                                width: width - 1,
+                                height: height,
+                                data: fullData.trim()
+                            });
+                            accumulatedText = '';
+                        }
+                    } else {
+                        accumulatedText += line + '\n';
+                        currentData = accumulatedText;
+                    }
+                });
+                return boundingBoxes;
+            }
+
+            function showPopup(element, content) {
+                let popup = document.getElementById('popup');
+                if (!popup) {
+                    popup = document.createElement('div');
+                    popup.id = 'popup';
+                    popup.className = 'popup';
+                    document.body.appendChild(popup);
+                }
+
+                popup.innerText = content;
+                popup.style.display = 'block';
+                const rect = element.getBoundingClientRect();
+                popup.style.left = (rect.right + window.scrollX) + 'px';
+                popup.style.top = (rect.top + window.scrollY) + 'px';
+            }
+
+            function hidePopup() {
+                let popup = document.getElementById('popup');
+                if (popup) {
+                    popup.style.display = 'none';
+                }
+            }
+
+            document.addEventListener('DOMContentLoaded', function () {
+                if (localStorage.getItem('loaderActive') === 'true') {
+                    document.getElementById('loader').style.display = 'block';
+                }
+                var pdfUrl = 'http://localhost:5000/uploads/to_process/output_with_bboxes_cleaned.pdf';
+
+                if (pdfUrl) {
+                    loadPDF(pdfUrl);
+                }
+
+                addMessage('Process pdf mode', 'bot');
+                fetchLogContent();
+            });
+
+            function fetchLogContent() {
+                var xhr = new XMLHttpRequest();
+                xhr.open('GET', 'http://localhost:5000/uploads/to_process/pdf_processor_log_cleaned.txt', true);
+                xhr.onload = function () {
+                    if (xhr.status === 200) {
+                        var responseText = xhr.responseText;
+                        var lines = responseText.split('\n');
+                        var logData = '';
+                        var coordRegex = /^(Article_title|Author|Abstract|Caption|Caption_Figure|Caption_Table|Figure|Table|Formula|Section|Link|Note|Acknowledgements|Reference|Phrase) coordinates: \(page: \d+, x: [-+]?[0-9]*\.?[0-9]+, y: [-+]?[0-9]*\.?[0-9]+, w: [-+]?[0-9]*\.?[0-9]+, h: [-+]?[0-9]*\.?[0-9]+\)$/;
+
+                        lines.forEach(function(line) {
+                            if (line.trim() == 'Cannot process pdf'){
+                                addMessage('This PDF cannot be processed', 'bot');
+                            }
+                            if (line.trim() !== '') {
+                                logData += line + '\n';
+                            }
+                        });
+
+                        document.getElementById('logData').value = logData;
+                        var sections = logData.split('end_section');
+
+                        sections.forEach(function(section) {
+                            section = section.trim();
+
+                            if (section !== '') {
+                                var filteredSection = section.split('\n').filter(function(line) {
+                                    return !coordRegex.test(line.trim());
+                                }).join('\n');
+                            }
+                        });
+                    } else {
+                        addMessage('Error loading log file.', 'bot');
+                    }
+                };
+                xhr.onerror = function () {
+                    addMessage('Error connecting to server.', 'bot');
+                };
+                xhr.send();
+            }
+
+            function checkEnter(event) {
+                if (event.key === 'Enter') {
+                    event.preventDefault();
+                    askQuestion();
+                }
+            }
+
+            function askQuestion() {
+                var loader = document.getElementById('loader');
+                var sendBtn = document.getElementById('send-button');
+                var questionBox = document.getElementById('question');
+
+                var question = document.getElementById('question').value;
+                if (question.trim() === '') return;
+
+                addMessage(question, 'user');
+                document.getElementById('question').value = '';
+
+                var logData = document.getElementById('logData').value;
+                var context = Array.from(document.querySelectorAll('.tag'))
+                    .map(tag => {
+                        let text = tag.textContent.trim();
+                        if (text.endsWith('x')) {
+                            text = text.slice(0, -1).trim();
+                        }
+                        return text;
+                    });
+                var pdfUrl = 'http://localhost:5000/uploads/to_process/output_with_bboxes_cleaned.pdf';
+                var useAutomaticContext = document.getElementById('autoContextCheckbox').checked;
+                loader.style.display = 'block';
+                localStorage.setItem('loaderActive', 'true');
+                sendBtn.disabled = true;
+                sendBtn.style.backgroundColor = '#A5D6A7';
+                sendBtn.style.cursor = 'default';
+                questionBox.disabled = true;
+                var xhr = new XMLHttpRequest();
+                xhr.open('POST', 'http://localhost:5000/answer_question', true);
+                xhr.setRequestHeader('Content-Type', 'application/json');
+                xhr.onload = function () {
+                    loader.style.display = 'none';
+                    localStorage.removeItem('loaderActive');
+                    sendBtn.disabled = false;
+                    sendBtn.style.backgroundColor = '';
+                    sendBtn.style.cursor = sendBtn.dataset.originalCursor || 'pointer';
+                    questionBox.disabled = false;
+
+                    if (xhr.status === 200) {
+                        var response = JSON.parse(xhr.responseText);
+                        addMessage(response.risposta, 'bot');
+                    } else {
+                        addMessage('Errore nella richiesta.', 'bot');
+                    }
+                };
+                xhr.onerror = function () {
+                    loader.style.display = 'none';
+                    localStorage.removeItem('loaderActive');
+
+                    sendBtn.disabled = false;
+                    sendBtn.style.backgroundColor = '';
+                    sendBtn.style.cursor = sendBtn.dataset.originalCursor || 'pointer';
+
+                    questionBox.disabled = false;
+
+                    addMessage('Errore di connessione al server.', 'bot');
+                };
+
+                var payload = JSON.stringify({
+                    question: question,
+                    logData: logData,
+                    contexts: context,
+                    pdfUrl: pdfUrl,
+                    useAutomaticContext: useAutomaticContext
+                });
+
+                xhr.send(payload);
+            }
+
+            function addTag(option) {
+                var tagContainer = document.getElementById('tag-container');
+
+                if (!option) {
+                    var select = document.getElementById('context-select');
+                    option = select.options[select.selectedIndex].text;
+                }
+
+                var existingTags = Array.from(tagContainer.children).map(tag => tag.textContent.trim().replace('x', ''));
+                if (!existingTags.includes(option)) {
+                    var tag = document.createElement('div');
+                    tag.className = 'tag';
+                    tag.innerHTML = option + '<span class="remove-tag" onclick="removeTag(this)"><b>x</b></span>';
+                    tagContainer.appendChild(tag);
+                }
+            }
+
+            function removeTag(element) {
+                var tagContainer = document.getElementById('tag-container');
+                tagContainer.removeChild(element.parentNode);
+            }
+
+            function addMessage(message, sender) {
+                var messagesContainer = document.getElementById('messages');
+                var messageElement = document.createElement('div');
+                messageElement.className = sender === 'user' ? 'message user' : 'message bot';
+                var bubbleElement = document.createElement('div');
+                bubbleElement.className = 'message-bubble';
+                bubbleElement.innerHTML = message;
+                messageElement.appendChild(bubbleElement);
+                messagesContainer.appendChild(messageElement);
+                messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            }
+        </script>
+
+        <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            var navLinks = document.querySelectorAll('.nav-links a');
+
+            navLinks.forEach(function(link) {
+                if (link.textContent !== 'Upload page') {
+                    link.style.pointerEvents = 'none';
+                    link.style.opacity = '0.5';
+                }
+            });
+        });
+        </script>
+    </body>
+</html>

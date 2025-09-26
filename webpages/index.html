@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Upload Files</title>
+        <link rel='stylesheet' href='../webpages/styles.css'>
+        <style>
+            .loader {
+                display: none;
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                z-index: 9999;
+                border: 16px solid #f3f3f3;
+                border-top: 16px solid #3498db;
+                border-radius: 50%;
+                width: 120px;
+                height: 120px;
+                animation: spin 2s linear infinite;
+            }
+
+            @keyframes spin {
+                0% { transform: rotate(0deg); }
+                100% { transform: rotate(360deg); }
+            }
+        </style>
+    </head>
+    <body>
+        <div class="nav-links">
+            <a href="index.html" class="active">Upload page</a>
+            <a href="latex_processor.html">LaTeX processor</a>
+            <a href="pdf_processor.html">PDF processor</a>
+            <a href="constraints_violations.html">Overlap annotator</a>
+            <a href="file_preview.html">File preview</a>
+        </div>
+        <div class="upload-container">
+            <div class="upload-block">
+                <input type="file" id="fileInputPDF" accept=".pdf">
+                <button class="upload-button" onclick="uploadPDF()">Upload PDF</button>
+            </div>
+            <div class="upload-block">
+                <input type="file" id="fileInputTEX" accept=".tex">
+                <button class="upload-button" onclick="uploadTEX()">Upload TEX</button>
+            </div>
+
+            <div id="pairUploadBlock" class="upload-block" style="border: 3px solid grey; border-radius: 15px; padding: 20px; margin-top: 30px; background-color: #f0f0f0;">
+                <div style="display: flex; justify-content: center; gap: 60px; align-items: flex-start; text-align: center; width: 100%;">
+                    <div>
+                        <label for="fileInputPDFPair" style="font-weight: bold; color: grey">PDF</label><br>
+                        <input type="file" id="fileInputPDFPair" accept=".pdf">
+                    </div>
+                    <div>
+                        <label for="fileInputTXTPair" style="font-weight: bold; color: grey">CSV</label><br>
+                        <input type="file" id="fileInputTXTPair" accept=".txt, .csv">
+                    </div>
+                </div>
+                <br>
+                <button id="uploadPairButton" class="upload-button" onclick="uploadPair()" disabled style="background-color: grey; cursor: not-allowed;">
+                    Upload PDF + annotations
+                </button>
+            </div>
+        </div>
+        <div class="loader" id="loader"></div>
+
+        <script>
+            function uploadPDF() {
+                var fileInput = document.getElementById('fileInputPDF');
+                if (!fileInput.files.length) return;
+
+                var file = fileInput.files[0];
+                var formData = new FormData();
+                formData.append('file', file);
+
+                var xhr = new XMLHttpRequest();
+                xhr.open('POST', 'http://localhost:5000/upload_pdf', true);
+                xhr.onload = function () {
+                    if (xhr.status === 200) {
+                        var response = JSON.parse(xhr.responseText);
+                        localStorage.setItem('fileType', 'pdf');
+                        localStorage.setItem('loaderActive', 'true');
+                        window.location.href = 'file_preview.html?pdfUrl=' + encodeURIComponent(response.url);
+                    } else {
+                        alert('Error uploading the file.');
+                    }
+                };
+                xhr.onerror = function() {
+                    alert('PDF upload error.');
+                };
+                xhr.send(formData);
+            }
+
+            function uploadTEX() {
+                var fileInput = document.getElementById('fileInputTEX');
+                if (!fileInput.files.length) return;
+
+                var file = fileInput.files[0];
+                var formData = new FormData();
+                formData.append('file', file);
+
+                var xhr = new XMLHttpRequest();
+                xhr.open('POST', 'http://localhost:5000/upload_tex', true);
+                xhr.onload = function () {
+                    if (xhr.status === 200) {
+                        var response = JSON.parse(xhr.responseText);
+                        localStorage.setItem('fileType', 'tex');
+                        window.location.href = 'file_preview.html?texUrl=' + encodeURIComponent(response.url);
+                    } else {
+                        alert('Error uploading the file.');
+                    }
+                };
+                xhr.onerror = function() {
+                    alert('TEX upload error.');
+                };
+                xhr.send(formData);
+            }
+
+            function uploadBIB() {
+                var fileInput = document.getElementById('fileInputBIB');
+                if (!fileInput.files.length) return;
+
+                var file = fileInput.files[0];
+                var formData = new FormData();
+                formData.append('file', file);
+
+                var xhr = new XMLHttpRequest();
+                xhr.open('POST', 'http://localhost:5000/upload_bib', true);
+                xhr.onload = function () {
+                    if (xhr.status === 200) {
+                        var response = JSON.parse(xhr.responseText);
+                        localStorage.setItem('fileType', 'bib');
+                        alert('BIB file uploaded successfully.');
+                    } else {
+                        alert('Error uploading the file.');
+                    }
+                };
+                xhr.onerror = function() {
+                    alert('BIB upload error.');
+                };
+                xhr.send(formData);
+            }
+
+            function uploadPair() {
+                var pdfFile = document.getElementById('fileInputPDFPair').files[0];
+                var txtFile = document.getElementById('fileInputTXTPair').files[0];
+
+                if (!pdfFile || !txtFile) {
+                    alert('Select both files.');
+                    return;
+                }
+
+                var formData = new FormData();
+                formData.append('pdf_file', pdfFile);
+                formData.append('txt_file', txtFile);
+
+                document.getElementById('loader').style.display = 'block';
+                localStorage.setItem('loaderActive', 'true');
+
+                var xhr = new XMLHttpRequest();
+                xhr.open('POST', 'http://localhost:5000/upload_pair', true);
+
+                xhr.onload = function () {
+                    if (xhr.status === 200) {
+                        try {
+                            var response = JSON.parse(xhr.responseText);
+                            if (response && response.pdf_url) {
+                                localStorage.setItem('fileType', 'pair');
+                                window.location.href = 'file_preview.html?pdfUrl=' + encodeURIComponent(response.pdf_url);
+                            } else {
+                                alert('Error in server response.');
+                                document.getElementById('loader').style.display = 'none';
+                            }
+                        } catch (e) {
+                            alert('Error parsing answer.');
+                            document.getElementById('loader').style.display = 'none';
+                        }
+                    } else {
+                        alert('File upload error.');
+                        document.getElementById('loader').style.display = 'none';
+                    }
+                };
+
+                xhr.onerror = function () {
+                    alert('Connection error.');
+                    document.getElementById('loader').style.display = 'none';
+                };
+
+                xhr.send(formData);
+            }
+        </script>
+
+        <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            var navLinks = document.querySelectorAll('.nav-links a');
+            navLinks.forEach(function(link) {
+                if (link.textContent !== 'Upload page') {
+                    link.style.pointerEvents = 'none';
+                    link.style.opacity = '0.5';
+                }
+            });
+
+            const pdfInput = document.getElementById('fileInputPDFPair');
+            const txtInput = document.getElementById('fileInputTXTPair');
+            const uploadButton = document.getElementById('uploadPairButton');
+            const pairBlock = document.getElementById('pairUploadBlock');
+
+            if (!pdfInput || !txtInput || !uploadButton || !pairBlock) {
+                console.error('Uno o più elementi non trovati nel DOM.');
+                return;
+            }
+
+            function checkFilesSelected() {
+                const pdfLabel = document.querySelector('label[for="fileInputPDFPair"]');
+                const txtLabel = document.querySelector('label[for="fileInputTXTPair"]');
+
+                if (pdfInput.files.length > 0) {
+                    pdfLabel.style.color = 'black';
+                } else {
+                    pdfLabel.style.color = 'grey';
+                }
+
+                if (txtInput.files.length > 0) {
+                    txtLabel.style.color = 'black';
+                } else {
+                    txtLabel.style.color = 'grey';
+                }
+
+                if (pdfInput.files.length > 0 && txtInput.files.length > 0) {
+                    uploadButton.disabled = false;
+                    uploadButton.style.backgroundColor = '#4CAF50';
+                    uploadButton.style.cursor = 'pointer';
+                    pairBlock.style.backgroundColor = '#e8f5e9';
+                    pairBlock.style.borderColor = '#4CAF50';
+                } else {
+                    uploadButton.disabled = true;
+                    uploadButton.style.backgroundColor = 'grey';
+                    uploadButton.style.cursor = 'not-allowed';
+                    pairBlock.style.backgroundColor = '#f7f7f7';
+                    pairBlock.style.borderColor = 'grey';
+                }
+            }
+
+        pdfInput.addEventListener('change', checkFilesSelected);
+        txtInput.addEventListener('change', checkFilesSelected);
+        });
+    </script>
+    </body>
+</html>
