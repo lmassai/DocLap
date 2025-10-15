@@ -41,19 +41,18 @@ def ask_to_LLaVA(lines, image_path):
         "one of the two given as input, without any change neither in the label nor in the numbers. No explanation, no "
         "extra text, no comments."
     )
-    print("\nQuestion given to to LLaVA:\n" + question + "\n")
+    print("\nQuestion given to to Qwen:\n" + question + "\n")
 
     with open(image_path, "rb") as f:
         image_data = base64.b64encode(f.read()).decode("utf-8")
 
     payload = {
-        "model": "llava",
+        "model": "qwen3-vl:235b-cloud",
         "prompt": question,
-        "images": [image_data],
+        "images": [image_data],  # lista di base64 come prima
         "temperature": 0,
         "stream": False
     }
-
     response = requests.post("http://localhost:11434/api/generate", json=payload)
 
     if response.status_code == 200:
@@ -70,3 +69,4 @@ def ask_to_LLaVA(lines, image_path):
     else:
         print("Error in response:", response.text)
         return None
+
