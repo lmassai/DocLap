@@ -83,11 +83,11 @@ def rispondi_domanda():
         relevant_images = extract_relevant_images(log_data_combined, image_dir)
 
         if not relevant_images:
-            print("[WARN] No relevant image found for LLaVA.")
+            print("[WARN] No relevant image found for Qwen.")
 
         encoded_images = []
 
-        print("Immagini inviate a LLaVA:")
+        print("Images sent to Qwen:")
         for img_path in relevant_images:
             print(" -", os.path.basename(img_path))
             with open(img_path, "rb") as f:
@@ -103,13 +103,12 @@ def rispondi_domanda():
         )
 
         payload = {
-            "model": "llava",
+            "model": "qwen3-vl:235b-cloud",
             "prompt": prompt,
-            "images": encoded_images,
+            "images": encoded_images,  # lista di base64 come prima
             "temperature": 0,
             "stream": False
         }
-
         response = requests.post("http://localhost:11434/api/generate", json=payload)
 
         if response.status_code == 200:
@@ -125,11 +124,11 @@ def rispondi_domanda():
                 pagine_str = ", ".join(str(p) for p in sorted(pagine))
                 risposta += "<br><b>Information found at page(s)</b>: " + pagine_str + "<br><br><b>Context: </b>" + str(contexts)
 
-            print('LLaVA: ' + risposta)
+            print('Qwen: ' + risposta)
             return jsonify({'risposta': risposta})
         else:
             print("Error in request:", response.text)
-            return jsonify({'answer': 'Error calling LLaVA'})
+            return jsonify({'answer': 'Error calling Qwen'})
 
     except Exception as e:
         print(f"Errore: {e}")
@@ -227,3 +226,4 @@ def answer_question_given_that(domanda, log_data_combined):
 
     print(risposta)
     return jsonify({'risposta': risposta})
+
