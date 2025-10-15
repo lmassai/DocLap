@@ -6,7 +6,7 @@
 3. Poppler (https://poppler.freedesktop.org/) MUST be installed, and its path has to be added to the O.S. path variable.
 4. Ollama MUST be installed (otherwise the LLM part will not work).
 5. ```ollama run gpt-oss:120b-cloud``` must be executed the first time to pull the model.
-6. ```ollama run llava``` must be executed the first time to pull the model.
+6. ```ollama run qwen3-vl:235b-cloud``` must be executed the first time to pull the model.
 7. LaTeXML MUST be installed (otherwise the LaTeX part will not work) from: https://math.nist.gov/~BMiller/LaTeXML/get.html
 8. When installing LaTeXML, it must be installed without tests, using:
 ```
@@ -30,6 +30,7 @@ python -m http.server
 ```
 http://localhost:8000/webpages/index.html
 ```
+
 
 
 
