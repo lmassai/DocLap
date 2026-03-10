@@ -3,7 +3,7 @@
 ## Installation
 1. Use Python 3.13 and add it to system path
 2. The dependency "fitz" is not the name of the package to download. PyMuPDF is the correct package.
-3. Poppler (https://poppler.freedesktop.org/) MUST be installed, and its path has to be added to the O.S. path variable.
+3. Poppler (https://poppler.freedesktop.org/) must be installed, and its path has to be added to the O.S. path variable.
 4. Ollama MUST be installed (https://ollama.com/download), otherwise the LLM part will not work.
 5. ```ollama run gpt-oss:120b-cloud``` must be executed the first time to pull the model.
 6. ```ollama run qwen3-vl:235b-cloud``` must be executed the first time to pull the model.
@@ -30,6 +30,7 @@ python -m http.server
 ```
 http://localhost:8000/webpages/index.html
 ```
+
 
 
 
