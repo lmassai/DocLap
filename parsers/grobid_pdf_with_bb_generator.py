@@ -39,7 +39,7 @@ def main(pdf_path):
                  "--form", "teiCoordinates=note",
                  "--form", "teiCoordinates=title",
                  "--form", "teiCoordinates=affiliation",
-                 "https://kermitt2-grobid.hf.space/api/processFulltextDocument",
+                 "https://grobidorg-grobid-full2.hf.space/api/processFulltextDocument",
                  ">", f"{out_dir}{os.path.splitext(os.path.basename(pdf_path))[0]}_grobid_output.xml"], shell=True)
 
         print(out_dir + 'grobid_output.xml created.')
