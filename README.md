@@ -22,23 +22,6 @@ Massai, L., & Marinai, S. (2027). The DocLap integrated system for understanding
 }
 ```
 
-**APA Style:**
-Massai, L., & Marinai, S. (2026). The DocLap interface for document layout analysis and interaction. In Proceedings of ECML PKDD 2026. Springer.
-
-**BibTeX:**
-```bibtex
-@inproceedings{MASSAI2026DOCLAP,
-  author    = {Lorenzo Massai and Simone Marinai},
-  title     = {The DocLap interface for document layout analysis and interaction},
-  booktitle = {Proceedings of ECML PKDD 2026},
-  year      = {2026},
-  publisher = {Springer},
-  address   = {Napoli, Italy},
-  pages     = {0--0},
-  month     = sep
-}
-```
-
 ## Overview
 
 Computational understanding of documents is focused on visual and text analysis, building upon computer vision and natural language processing. With the advent of transformers document understanding is even more shifted from the actual comprehension of documents, which relies on concurrent perception of text, layout elements and document structure, to convoluted feature representations. Recent trends for providing unified access to such representations go towards Large Language Models (LLMs). However, these models have limitations: they lack explainability, demand significant resources for training and inference, and are not well suited for processing extensive inputs nor for direct application in specialized domains.
