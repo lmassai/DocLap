@@ -4,7 +4,7 @@
 
 If you use DocLap or the resources in this repository, please cite the following papers:
 
-**APA Style:**
+* **APA Style:**
 Massai, L., & Marinai, S. (2027). The DocLap integrated system for understanding multi-page scholarly documents. *Expert Systems with Applications*, 333, 133839. https://doi.org/10.1016/j.eswa.2026.133839
 
 **BibTeX:**
@@ -22,7 +22,7 @@ Massai, L., & Marinai, S. (2027). The DocLap integrated system for understanding
 }
 ```
 
-**APA Style:**
+* **APA Style:**
 Massai, L., & Marinai, S. (2026). The DocLap interface for document layout analysis and interaction. In Proceedings of ECML PKDD 2026. Springer.
 
 **BibTeX:**
