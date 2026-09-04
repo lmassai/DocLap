@@ -4,7 +4,7 @@
 
 If you use DocLap or the resources in this repository, please cite the following papers:
 
-* **APA Style:**
+**APA Style:**
 Massai, L., & Marinai, S. (2027). The DocLap integrated system for understanding multi-page scholarly documents. *Expert Systems with Applications*, 333, 133839. https://doi.org/10.1016/j.eswa.2026.133839
 
 **BibTeX:**
@@ -22,7 +22,7 @@ Massai, L., & Marinai, S. (2027). The DocLap integrated system for understanding
 }
 ```
 
-* **APA Style:**
+**APA Style:**
 Massai, L., & Marinai, S. (2026). The DocLap interface for document layout analysis and interaction. In Proceedings of ECML PKDD 2026. Springer.
 
 **BibTeX:**
@@ -53,14 +53,14 @@ As a result of this work, the DocLap (Document Layout Parser) system for documen
 * **Ontology-Based Error Correction:** Enhances visual recognition accuracy through multi-modal LLM correction backed by automated ontology constraint violation detection.
 * **Conversational Reasoning & QA:** Enables semantic retrieval over extracted data, allowing users to query and interact with complex scholarly documents using natural language.
 
-## Installation
+## Installation on Microsoft Windows
 1. Use Python 3.13 and add it to system path
 2. The dependency "fitz" is not the name of the package to download. PyMuPDF is the correct package.
 3. Poppler (https://poppler.freedesktop.org/) must be installed, and its path has to be added to the O.S. path variable.
-4. Ollama MUST be installed (https://ollama.com/download), otherwise the LLM part will not work.
+4. Ollama must be installed (https://ollama.com/download), otherwise the LLM part will not work.
 5. ```ollama run gpt-oss:120b-cloud``` must be executed the first time to pull the model.
 6. ```ollama run qwen3-vl:235b-cloud``` must be executed the first time to pull the model.
-7. LaTeXML MUST be installed (otherwise the LaTeX part will not work) from: https://math.nist.gov/~BMiller/LaTeXML/get.html
+7. LaTeXML must be installed (otherwise the LaTeX part will not work) from: https://math.nist.gov/~BMiller/LaTeXML/get.html
 8. When installing LaTeXML, it must be installed without tests, using:
 ```
 cpan -T LaTeXML
