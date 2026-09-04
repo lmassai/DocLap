@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+message: "If you use this software or resource, please cite the original paper as follows."
+authors:
+  - family-names: "Massai"
+    given-names: "Lorenzo"
+  - family-names: "Marinai"
+    given-names: "Simone"
+title: "The DocLap integrated system for understanding multi-page scholarly documents"
+version: "1.0.0"
+doi: "10.1016/j.eswa.2026.133839"
+date-released: 2027-01-01
+url: "https://www.sciencedirect.com/science/article/pii/S0957417426027478"
+preferred-citation:
+  type: article
+  authors:
+    - family-names: "Massai"
+      given-names: "Lorenzo"
+    - family-names: "Marinai"
+      given-names: "Simone"
+  title: "The DocLap integrated system for understanding multi-page scholarly documents"
+  journal: "Expert Systems with Applications"
+  volume: 333
+  pages: "133839"
+  year: 2027
+  doi: "10.1016/j.eswa.2026.133839"
